@@ -1,8 +1,8 @@
-name: Build Firmware
+name: Build Zephyr Firmware
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master ]  # or "master", if that's what you use
 
 jobs:
   build:
@@ -12,30 +12,41 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Set up ARM GCC Toolchain
-      uses: carlosperate/arm-none-eabi-gcc-action@v1
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y ninja-build gperf ccache dfu-util device-tree-compiler wget python3-pip
+        pip install west
+        west init -l .
+        west update
+        west zephyr-export
+        pip install -r zephyr/scripts/requirements.txt
 
-    - name: Build Firmware
-      run: bash build.sh
+    - name: Build Firmware (Hello World)
+      run: |
+        west build -b qemu_cortex_m3 zephyr/samples/hello_world
 
-    - name: Run QEMU Simulation Test
-      run: bash test/test_sim.sh
+    - name: Run QEMU Test
+      run: |
+        west build -t run > test/test_output.log
 
     - name: Install Syft and Generate SBOM
       run: |
         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b . v0.100.0
-        ./syft dir:. --output spdx-json > metadata/firmware.spdx.json
+        ./syft dir:build --output spdx-json > metadata/firmware.spdx.json
 
-    - name: Generate Hash
-      run: sha256sum build/firmware.elf > metadata/firmware.sha256
+    - name: Generate Build Metadata + Hash
+      run: |
+        echo "{\"git_sha\": \"$(git rev-parse --short HEAD)\", \"build_time\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > metadata/build_metadata.json
+        sha256sum build/zephyr/zephyr.elf > metadata/firmware.sha256
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: firmware-artifacts
         path: |
-          build/firmware.elf
-          build/firmware.hex
+          build/zephyr/zephyr.elf
+          build/zephyr/zephyr.hex
           metadata/build_metadata.json
           metadata/firmware.spdx.json
           metadata/firmware.sha256
