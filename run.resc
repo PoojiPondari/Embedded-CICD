@@ -1,4 +1,11 @@
+using sysbus
 mach create "blinky"
+
 machine LoadPlatformDescription @platforms/boards/stm32f4_discovery.repl
-sysbus LoadELF @/renode/build/firmware.elf
+sysbus LoadELF @build/firmware.elf
+
+# Log UART output to file
+sysbus.usart2 LogToFile @output/test_results.log
+
+# Start simulation
 start
